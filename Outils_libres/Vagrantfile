@@ -43,3 +43,4 @@ Vagrant.configure("2") do |config|
 
 end
 # vim: ft=ruby syn=ruby fileencoding=utf-8 sw=2 ts=2 ai eol et si
+# Coucou

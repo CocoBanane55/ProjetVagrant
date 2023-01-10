@@ -1,0 +1,88 @@
+Vagrant.configure("2") do |config|
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = "384"
+    vb.cpus = 1
+  end
+
+  # On all machines, see https://www.vagrantup.com/docs/provisioning/basic_usage.html
+  config.vm.provision "shell", inline: <<-SHELL
+    apt-get update
+    apt-get -y install libnss-mdns
+  SHELL
+
+  config.vm.define "db" do |b|
+    b.vm.box = "debian/contrib-stretch64"
+    b.vm.hostname = "db"
+    b.vm.network "private_network", ip: "10.0.0.2"
+
+    b.vm.provision "shell", inline: <<-SHELL
+      set -ex
+      apt-get -y install default-mysql-server
+      sed -i 's/^bind-address.*/bind-address = */' /etc/mysql/mariadb.conf.d/50-server.cnf
+      # Drop database if it exists to avoid error
+      echo 'DROP DATABASE IF EXISTS wordpress' | mysql
+      echo 'CREATE DATABASE wordpress' | mysql
+      echo "GRANT ALL PRIVILEGES ON wordpress.* TO 'joe'@'%' IDENTIFIED BY '12345';" | mysql
+      echo "FLUSH PRIVILEGES;" | mysql
+      systemctl restart mariadb
+      mysql wordpress < /vagrant/wordpress.sql
+    SHELL
+
+    b.vm.provision "shell", path: "provision.sh", args: "db"
+  end
+
+  config.vm.define "web" do |b|
+    b.vm.box = "debian/contrib-stretch64"
+    b.vm.hostname = "web"
+    b.vm.network "private_network", ip: "10.0.0.3"
+
+    b.vm.provision "shell", inline: <<-SHELL
+      set -ex
+      apt-get -y install wordpress
+      cat  <<-EOF > /etc/apache2/sites-enabled/000-default.conf
+NameVirtualHost *:80
+
+<VirtualHost *:80>
+UseCanonicalName Off
+VirtualDocumentRoot /usr/share/wordpress
+Options All
+</VirtualHost>
+EOF
+      a2enmod rewrite
+      a2enmod vhost_alias
+      systemctl restart apache2
+
+      cat <<-EOF > /etc/wordpress/config-default.php
+<?php
+# Created by setup-mysql 
+define('DB_NAME', 'wordpress');
+define('DB_USER', 'joe');
+define('DB_PASSWORD', '12345');
+define('DB_HOST', 'db.local');
+define('SECRET_KEY', 'pfIZHYz5q0cnfPdrnw60BLijZualZ8pcxbxEGhBmt4grp5Fm2k');
+define('WP_CONTENT_DIR', '/var/lib/wordpress/wp-content');
+?>
+EOF
+    chmod 640 /etc/wordpress/config-default.php
+    chown root:www-data /etc/wordpress/config-default.php
+    SHELL
+
+    b.vm.provision "shell", path: "provision.sh", args: "web"
+  end
+
+  config.vm.define "ops", primary: true do |b|
+    b.vm.box = "debian/contrib-stretch64"
+    b.vm.hostname = "ops"
+    b.vm.network "forwarded_port", guest: 80, host: 8000
+    b.vm.network "private_network", ip: "10.0.0.4"
+
+    b.vm.provision "shell", inline: <<-SHELL
+    set -ex
+    apt-get -y install apache2-utils w3m
+    SHELL
+
+    b.vm.provision "shell", path: "provision.sh", args: "ops"
+  end
+end
+
+# vim: ft=ruby syn=ruby fileencoding=utf-8 sw=2 ts=2 ai eol et si

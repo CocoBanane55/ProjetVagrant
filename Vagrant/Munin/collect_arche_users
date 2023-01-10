@@ -1,0 +1,19 @@
+#!/bin/sh
+
+case $1 in
+   config)
+        cat <<'EOM'
+graph_title arche
+graph_vlabel arche
+usersarche.label arche
+graph_args --base 20000 -l 0
+graph_scale no
+graph_category apache
+usersarche.warning 10000
+usersarche.critical 20000
+EOM
+        exit 0;;
+esac
+
+archeusers=$(curl -s https://arche.univ-lorraine.fr/live-stats/stats.json | grep liveuser | tr -dc 0-9)
+echo "usersarche.value $archeusers"

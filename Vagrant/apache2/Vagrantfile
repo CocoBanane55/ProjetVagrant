@@ -1,0 +1,18 @@
+Vagrant.configure("2") do |config|
+  config.vm.box = "debian/bullseye64"
+
+  config.vm.network "forwarded_port", guest: 80, host: 8080
+  config.vm.network "forwarded_port", guest: 443, host: 8443
+
+  config.vm.synced_folder "www", "/var/www/"
+  config.vm.synced_folder "apache2_conf", "/etc/apache2"
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = 512
+  end
+
+  config.vm.provision "shell", inline: <<-SHELL
+    sudo apt-get -qq update
+    sudo apt-get -qq -y install apache2 etckeeper htop multitail vim tree curl lsof wget siege goaccess tmux
+  SHELL
+end
